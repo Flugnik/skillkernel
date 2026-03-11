@@ -1,0 +1,1140 @@
+
+
+# 1. Общая модель SkillKernel
+
+SkillKernel — это **ядро платформы**, в которое подключаются доменные скиллы.
+
+Например:
+
+* `farm_guardian`
+* `limiter`
+* потом:
+
+  * `woodshop`
+  * `autoservice`
+  * `warehouse`
+
+Поток такой:
+
+```text
+Interface → IncomingEvent → Router → Selected Skill → SkillResult → ConfirmManager → Executor → Memory/EventLog
+```
+
+---
+
+# 2. Дерево проекта
+
+Вот рабочая структура без мусора.
+
+```text
+skillkernel/
+│
+├── main.py
+├── README.md
+├── pyproject.toml
+│
+├── core/
+│   ├── __init__.py
+│   ├── models.py
+│   ├── dispatcher.py
+│   ├── router.py
+│   ├── registry.py
+│   ├── confirm_manager.py
+│   ├── executor.py
+│   ├── event_log.py
+│   ├── config.py
+│   ├── exceptions.py
+│   └── learning_manager.py
+│
+├── interfaces/
+│   ├── __init__.py
+│   ├── cli_adapter.py
+│   ├── telegram_adapter.py
+│   └── base.py
+│
+├── skills/
+│   ├── __init__.py
+│   ├── base.py
+│   │
+│   ├── farm_guardian/
+│   │   ├── __init__.py
+│   │   ├── manifest.py
+│   │   ├── plugin.py
+│   │   ├── intents.py
+│   │   ├── parser.py
+│   │   ├── planner.py
+│   │   ├── validators.py
+│   │   ├── examples.py
+│   │   └── memory_adapter.py
+│   │
+│   └── limiter/
+│       ├── __init__.py
+│       ├── manifest.py
+│       ├── plugin.py
+│       ├── intents.py
+│       ├── parser.py
+│       ├── planner.py
+│       ├── validators.py
+│       ├── examples.py
+│       └── memory_adapter.py
+│
+├── executors/
+│   ├── __init__.py
+│   ├── file_executor.py
+│   ├── notification_executor.py
+│   └── registry.py
+│
+├── memory/
+│   ├── runtime/
+│   │   ├── pending_plans.json
+│   │   ├── sessions.json
+│   │   └── subscriptions.json
+│   │
+│   ├── event_log/
+│   │   └── 2026-03-11.jsonl
+│   │
+│   └── learned_patterns/
+│       ├── global.json
+│       ├── farm_guardian.json
+│       └── limiter.json
+│
+├── config/
+│   ├── platform.yaml
+│   ├── skills.yaml
+│   └── logging.yaml
+│
+└── tests/
+    ├── test_models.py
+    ├── test_router.py
+    ├── test_dispatcher.py
+    ├── test_confirm_manager.py
+    ├── test_farm_guardian.py
+    └── test_limiter.py
+```
+
+---
+
+# 3. Главные сущности системы
+
+Нужны не десятки сущностей, а канонический минимум.
+
+## 3.1 IncomingEvent
+
+Единый входной объект.
+
+Содержит:
+
+* `event_id`
+* `source`
+* `user_id`
+* `session_id`
+* `text`
+* `timestamp`
+* `metadata`
+
+Назначение:
+любой интерфейс превращает raw input именно в `IncomingEvent`.
+
+---
+
+## 3.2 DispatchDecision
+
+Решение роутера.
+
+Содержит:
+
+* `status`: `matched | ambiguous | unknown`
+* `skill_name`
+* `confidence`
+* `reason`
+* `candidate_skills`
+* `clarification_question`
+
+---
+
+## 3.3 SkillContext
+
+Контекст, который ядро передаёт скиллу.
+
+Содержит:
+
+* `event`
+* `platform_config`
+* `runtime_handles`
+* `memory_handles`
+
+---
+
+## 3.4 SkillResult
+
+Что вернул скилл.
+
+Содержит:
+
+* `status`:
+  `plan_ready | clarification_required | informational | rejected | error`
+* `intent`
+* `payload`
+* `plan`
+* `preview`
+* `clarification_question`
+* `reason`
+
+---
+
+## 3.5 ActionPlan
+
+План действий.
+
+Содержит:
+
+* `plan_id`
+* `skill_name`
+* `intent`
+* `actions`
+* `requires_confirmation`
+* `preview`
+
+---
+
+## 3.6 ExecutionResult
+
+Результат исполнения.
+
+Содержит:
+
+* `success`
+* `executed_actions`
+* `failed_actions`
+* `messages`
+* `artifacts`
+
+---
+
+# 4. Список классов ядра
+
+Теперь пофайлово.
+
+---
+
+## `core/models.py`
+
+Здесь только Pydantic-модели.
+
+### Классы:
+
+* `IncomingEvent`
+* `DispatchDecision`
+* `SkillContext`
+* `SkillResult`
+* `ActionPlan`
+* `ExecutionResult`
+* `ClarificationRequest` — опционально, можно встроить в `SkillResult`
+
+### Зачем:
+
+единый контракт всей платформы.
+
+### Кто использует:
+
+все.
+
+---
+
+## `core/exceptions.py`
+
+### Классы:
+
+* `SkillKernelError`
+* `RegistryError`
+* `RoutingError`
+* `SkillExecutionError`
+* `ConfirmationError`
+* `ExecutorError`
+
+### Зачем:
+
+нормальная иерархия ошибок.
+
+---
+
+## `core/config.py`
+
+### Классы:
+
+* `PlatformConfig`
+* `RoutingConfig`
+* `LoggingConfig`
+* `ConfirmationConfig`
+
+### Функции:
+
+* `load_platform_config()`
+* `load_skills_config()`
+
+### Ответственность:
+
+загрузка YAML/ENV-конфига.
+
+### Кто использует:
+
+`main.py`, `dispatcher.py`, `registry.py`, `router.py`.
+
+---
+
+## `core/registry.py`
+
+### Главный класс:
+
+`SkillRegistry`
+
+### Методы:
+
+* `register(skill)`
+* `get(skill_name)`
+* `list_skills()`
+* `load_from_package("skills")`
+
+### Ответственность:
+
+реестр всех подключённых скиллов.
+
+### Кто вызывает:
+
+`dispatcher.py`, `router.py`.
+
+### Что важно:
+
+ядро не должно хардкодить `farm_guardian` и `limiter`.
+Они должны грузиться через registry.
+
+---
+
+## `core/router.py`
+
+### Главный класс:
+
+`SkillRouter`
+
+### Зависимости:
+
+* `SkillRegistry`
+* `RoutingConfig`
+* опционально `LearningManager`
+
+### Методы:
+
+* `route(event: IncomingEvent) -> DispatchDecision`
+* `_score_skills(event)`
+* `_resolve(scores)`
+
+### Ответственность:
+
+выбрать лучший скилл.
+
+### Важная логика:
+
+1. просит каждый скилл дать score
+2. сортирует кандидатов
+3. решает:
+
+   * matched
+   * ambiguous
+   * unknown
+
+### Кто вызывает:
+
+`dispatcher.py`
+
+---
+
+## `core/dispatcher.py`
+
+### Главный класс:
+
+`Dispatcher`
+
+Это сердце платформы.
+
+### Зависимости:
+
+* `SkillRegistry`
+* `SkillRouter`
+* `ConfirmManager`
+* `ActionExecutor`
+* `EventLogger`
+
+### Методы:
+
+* `handle_event(event: IncomingEvent)`
+* `_dispatch_to_skill(event, decision)`
+* `_handle_skill_result(result)`
+* `confirm(plan_id, user_id)`
+* `reject(plan_id, user_id)`
+
+### Ответственность:
+
+оркестрация всего процесса.
+
+### Логика:
+
+1. получает `IncomingEvent`
+2. вызывает `router.route()`
+3. если `unknown/ambiguous` — возвращает ответ
+4. если `matched` — вызывает нужный скилл
+5. получает `SkillResult`
+6. если `plan_ready` и нужно подтверждение:
+
+   * сохраняет plan
+   * возвращает preview
+7. если не нужно подтверждение:
+
+   * сразу исполняет
+8. пишет event log
+
+### Кто вызывает:
+
+интерфейсы
+
+---
+
+## `core/confirm_manager.py`
+
+### Главный класс:
+
+`ConfirmManager`
+
+### Методы:
+
+* `store_plan(plan, user_id, session_id)`
+* `get_plan(plan_id)`
+* `confirm(plan_id, user_id)`
+* `reject(plan_id, user_id)`
+* `cleanup_expired()`
+
+### Ответственность:
+
+управление pending plan.
+
+### Где хранит:
+
+`memory/runtime/pending_plans.json`
+
+### Почему отдельно:
+
+это системный механизм, не часть навыка.
+
+---
+
+## `core/executor.py`
+
+### Главный класс:
+
+`ActionExecutor`
+
+### Зависимости:
+
+* registry исполняющих адаптеров
+
+### Методы:
+
+* `execute(plan: ActionPlan) -> ExecutionResult`
+* `_execute_action(action)`
+
+### Ответственность:
+
+выполнять действия из `ActionPlan`.
+
+### Принцип:
+
+не сам пишет файлы, а делегирует в executor adapters.
+
+---
+
+## `core/event_log.py`
+
+### Главный класс:
+
+`EventLogger`
+
+### Методы:
+
+* `log_incoming_event(event)`
+* `log_routing(event, decision)`
+* `log_skill_result(event, skill_result)`
+* `log_execution(plan, result)`
+* `log_error(...)`
+
+### Ответственность:
+
+запись истории в JSONL.
+
+### Где хранит:
+
+`memory/event_log/YYYY-MM-DD.jsonl`
+
+---
+
+## `core/learning_manager.py`
+
+На первом этапе можно сделать простым.
+
+### Главный класс:
+
+`LearningManager`
+
+### Методы:
+
+* `record_unknown(event)`
+* `record_ambiguous(event, candidates)`
+* `record_manual_correction(event, chosen_skill)`
+* `load_patterns(skill_name=None)`
+
+### Ответственность:
+
+не обучение “магией”, а накопление материала.
+
+### На v0.1:
+
+может просто писать случаи в JSON.
+
+---
+
+# 5. Контракт скилла
+
+Это ключевая часть.
+
+## `skills/base.py`
+
+Здесь должен быть базовый интерфейс.
+
+### Класс:
+
+`BaseSkill`
+
+### Поля:
+
+* `name`
+* `version`
+* `description`
+* `examples`
+
+### Методы:
+
+* `score(event: IncomingEvent) -> float`
+* `handle(ctx: SkillContext) -> SkillResult`
+
+Этого достаточно.
+
+### Почему не больше:
+
+не надо в базовый интерфейс совать confirm/execute.
+Исполнение — дело ядра.
+
+---
+
+# 6. Устройство одного скилла
+
+Теперь на примере `farm_guardian`.
+
+---
+
+## `skills/farm_guardian/manifest.py`
+
+### Содержит:
+
+* `SKILL_NAME`
+* `VERSION`
+* `DESCRIPTION`
+* `EXAMPLES`
+* `SUPPORTED_INTENTS`
+
+### Назначение:
+
+метаданные навыка.
+
+---
+
+## `skills/farm_guardian/intents.py`
+
+### Pydantic-классы:
+
+* `FarmNoteIntent`
+* `FarmObserveIntent`
+* `FarmWeatherIntent`
+* `FarmProtocolIntent`
+
+### Назначение:
+
+строгая доменная структура.
+
+---
+
+## `skills/farm_guardian/parser.py`
+
+### Главный класс:
+
+`FarmParser`
+
+### Методы:
+
+* `parse(text, memory_adapter) -> parsed domain object`
+* `_extract_animal()`
+* `_extract_protocol()`
+* `_extract_weather_request()`
+
+### Назначение:
+
+разобрать входной текст в рамках домена.
+
+---
+
+## `skills/farm_guardian/validators.py`
+
+### Класс:
+
+`FarmValidator`
+
+### Методы:
+
+* `validate_intent(...)`
+* `validate_animal_exists(...)`
+* `validate_protocol_exists(...)`
+
+### Назначение:
+
+доменная валидация.
+
+---
+
+## `skills/farm_guardian/planner.py`
+
+### Главный класс:
+
+`FarmPlanner`
+
+### Методы:
+
+* `build_plan(parsed_intent) -> ActionPlan`
+* `build_preview(parsed_intent, plan) -> str`
+
+### Назначение:
+
+собрать декларативный план действий.
+
+---
+
+## `skills/farm_guardian/memory_adapter.py`
+
+### Главный класс:
+
+`FarmMemoryAdapter`
+
+### Методы:
+
+* `find_animal_slug(name)`
+* `get_protocol(name)`
+* `get_today_journal_path()`
+* `animal_card_path(slug)`
+
+### Назначение:
+
+не лезть из parser/planner напрямую в файловую структуру.
+
+---
+
+## `skills/farm_guardian/plugin.py`
+
+### Главный класс:
+
+`FarmGuardianSkill(BaseSkill)`
+
+### Методы:
+
+* `score(event)`
+* `handle(ctx)`
+
+### Как устроен `handle()`:
+
+1. вызывает parser
+2. валидирует
+3. если надо — просит уточнение
+4. если всё ок — строит `ActionPlan`
+5. возвращает `SkillResult(status="plan_ready", ...)`
+
+---
+
+# 7. Устройство второго скилла: limiter
+
+Аналогично.
+
+---
+
+## `skills/limiter/intents.py`
+
+### Pydantic-классы:
+
+* `ResourceWriteOffIntent`
+* `ResourceIncomeIntent`
+* `ExpenseIntent`
+* `StockQueryIntent`
+
+---
+
+## `skills/limiter/parser.py`
+
+### Класс:
+
+`LimiterParser`
+
+Разбирает:
+
+* что списать
+* сколько
+* в каких единицах
+* куда
+* дата/время
+* комментарий
+
+---
+
+## `skills/limiter/planner.py`
+
+Строит `ActionPlan` вида:
+
+* записать в лог лимитов
+* обновить остаток
+* при необходимости отправить предупреждение
+
+---
+
+## `skills/limiter/plugin.py`
+
+### Класс:
+
+`LimiterSkill(BaseSkill)`
+
+То же самое: `score()` и `handle()`.
+
+---
+
+# 8. Исполнители действий
+
+Теперь слой side effects.
+
+---
+
+## `executors/file_executor.py`
+
+### Класс:
+
+`FileExecutor`
+
+### Методы:
+
+* `execute(action: dict)`
+
+### Поддерживаемые action types:
+
+* `write_markdown`
+* `append_jsonl`
+* `ensure_file`
+* `replace_block`
+
+---
+
+## `executors/notification_executor.py`
+
+### Класс:
+
+`NotificationExecutor`
+
+### Методы:
+
+* `execute(action: dict)`
+
+### Поддерживаемые action types:
+
+* `send_message`
+* `send_alert`
+
+---
+
+## `executors/registry.py`
+
+### Класс:
+
+`ExecutorRegistry`
+
+### Методы:
+
+* `register(action_type, executor)`
+* `get(action_type)`
+
+### Зачем:
+
+`ActionExecutor` должен мапить action type на конкретного исполнителя.
+
+---
+
+# 9. Кто кого вызывает
+
+Вот главное в цепочке.
+
+## Старт приложения
+
+`main.py` делает:
+
+1. грузит конфиг
+2. создаёт `SkillRegistry`
+3. регистрирует скиллы
+4. создаёт `SkillRouter`
+5. создаёт `ConfirmManager`
+6. создаёт `ActionExecutor`
+7. создаёт `EventLogger`
+8. собирает `Dispatcher`
+9. передаёт его в CLI/Telegram adapter
+
+---
+
+## При обычном сообщении
+
+`CLIAdapter` или `TelegramAdapter`:
+
+1. получает текст
+2. строит `IncomingEvent`
+3. вызывает `dispatcher.handle_event(event)`
+
+---
+
+## Внутри `Dispatcher.handle_event()`
+
+1. `event_logger.log_incoming_event(event)`
+2. `decision = router.route(event)`
+3. `event_logger.log_routing(event, decision)`
+
+Дальше:
+
+### если `unknown`
+
+возвращает ответ интерфейсу
+
+### если `ambiguous`
+
+возвращает вопрос на уточнение
+
+### если `matched`
+
+4. `skill = registry.get(decision.skill_name)`
+5. `ctx = SkillContext(...)`
+6. `result = skill.handle(ctx)`
+7. `event_logger.log_skill_result(event, result)`
+
+---
+
+## Если `SkillResult.status == "plan_ready"`
+
+`Dispatcher`:
+
+1. проверяет `plan.requires_confirmation`
+2. если `True`:
+
+   * `confirm_manager.store_plan(...)`
+   * возвращает preview интерфейсу
+3. если `False`:
+
+   * `executor.execute(plan)`
+   * `event_logger.log_execution(...)`
+   * возвращает результат
+
+---
+
+## При подтверждении
+
+Интерфейс получает `/yes` или `confirm <plan_id>` и вызывает:
+
+`dispatcher.confirm(plan_id, user_id)`
+
+Дальше:
+
+1. `plan = confirm_manager.get_plan(plan_id)`
+2. `result = executor.execute(plan)`
+3. `event_logger.log_execution(plan, result)`
+4. `confirm_manager.confirm(plan_id, user_id)` или удаляет plan
+5. возвращает результат интерфейсу
+
+---
+
+# 10. Как должны выглядеть action types
+
+На старте не надо много.
+
+Достаточно 4–5 типов.
+
+## Минимальный набор:
+
+* `write_markdown`
+* `append_jsonl`
+* `replace_block`
+* `send_message`
+* `noop`
+
+---
+
+## Пример action для farm_guardian
+
+```json
+{
+  "type": "write_markdown",
+  "target": "memory/domains/farm_guardian/journal/2026-03/2026-03-11.md",
+  "section": "Записи",
+  "content": "У Маши сопли"
+}
+```
+
+---
+
+## Пример action для limiter
+
+```json
+{
+  "type": "append_jsonl",
+  "target": "memory/domains/limiter/logs/stock.jsonl",
+  "payload": {
+    "event": "writeoff",
+    "item": "ячмень",
+    "amount": 12,
+    "unit": "кг"
+  }
+}
+```
+
+---
+
+# 11. Как должен выглядеть интерфейсный слой
+
+## `interfaces/base.py`
+
+### Класс:
+
+`BaseInterfaceAdapter`
+
+### Методы:
+
+* `build_event(raw_input) -> IncomingEvent`
+* `render_response(result) -> str`
+
+---
+
+## `interfaces/cli_adapter.py`
+
+### Класс:
+
+`CLIAdapter`
+
+### Задача:
+
+дать быстрый способ тестирования ядра без Telegram.
+
+### Минимальный режим:
+
+цикл:
+
+* ввёл фразу
+* получил preview / clarification / result
+
+Это нужен обязательно.
+
+---
+
+## `interfaces/telegram_adapter.py`
+
+На первом этапе можно даже не писать, пока не стабилизируется CLI.
+
+Это важный момент:
+**ядро надо сначала отладить в CLI**.
+
+---
+
+# 12. Что должно быть в логах
+
+Я бы сделал JSONL-логи.
+
+Каждая запись содержит:
+
+* `ts`
+* `layer`
+* `event_id`
+* `user_id`
+* `action`
+* `payload`
+
+Примеры `layer`:
+
+* `interface`
+* `router`
+* `skill`
+* `executor`
+* `system`
+
+Это потом даст возможность разбирать поведение системы без гадания.
+
+---
+
+# 13. Минимальный порядок реализации
+
+Вот это самый важный практический кусок.
+
+## Этап 1 — каркас ядра
+
+Сделать:
+
+* `core/models.py`
+* `core/exceptions.py`
+* `skills/base.py`
+* `core/registry.py`
+* `core/router.py`
+* `core/dispatcher.py`
+
+На этом этапе можно без confirm и без executor, просто чтобы шёл маршрут.
+
+---
+
+## Этап 2 — два заглушечных скилла
+
+Сделать:
+
+* `farm_guardian/plugin.py`
+* `limiter/plugin.py`
+
+Пока без глубокой логики.
+
+Достаточно:
+
+* `score()`
+* `handle()` с простыми mock-plan
+
+Цель: проверить контур.
+
+---
+
+## Этап 3 — confirm и executor
+
+Сделать:
+
+* `core/confirm_manager.py`
+* `core/executor.py`
+* `executors/file_executor.py`
+* `executors/registry.py`
+
+После этого уже появится честный цикл:
+`plan → preview → confirm → execute`
+
+---
+
+## Этап 4 — CLI
+
+Сделать:
+
+* `interfaces/base.py`
+* `interfaces/cli_adapter.py`
+* `main.py`
+
+После этого можно гонять ядро вручную.
+
+---
+
+## Этап 5 — доменная логика farm_guardian
+
+Перенести в новый скилл:
+
+* животных
+* протоколы
+* weather intent
+* note / observe
+
+---
+
+## Этап 6 — доменная логика limiter
+
+Потом подключить limiter.
+
+---
+
+## Этап 7 — event log и learning
+
+Сделать:
+
+* `core/event_log.py`
+* `core/learning_manager.py`
+
+---
+
+# 14. Что не делать на старте
+
+Чтобы не уйти в дебри, на старте **не надо**:
+
+* голосовой интерфейс
+* автосамообучение
+* сложную LLM-оркестрацию
+* marketplace навыков
+* web UI
+* базу данных
+* многопользовательские роли
+* rollback engine
+
+Это всё потом.
+
+Сначала нужен **железный core loop**.
+
+---
+
+# 15. Каноническое ядро v0.1
+
+Если сжать до самого важного, то v0.1 должен состоять из этого:
+
+## Обязательные модули:
+
+* `models.py`
+* `registry.py`
+* `router.py`
+* `dispatcher.py`
+* `confirm_manager.py`
+* `executor.py`
+* `skills/base.py`
+* `skills/farm_guardian/plugin.py`
+* `skills/limiter/plugin.py`
+* `executors/file_executor.py`
+* `interfaces/cli_adapter.py`
+* `main.py`
+
+Этого уже достаточно, чтобы получить рабочий первый скелет платформы.
+
+---
+
+# 16. Мой инженерный вывод
+
+Правильный старт для SkillKernel такой:
+
+**Сначала не “умный ИИ”, а контрактная модульная шина.**
+
+То есть:
+
+* строгие модели
+* единый skill contract
+* routing
+* preview/confirm/execute
+* action executor
+* CLI для отладки
+
+И уже потом:
+
+* Qwen
+* Sonnet
+* Telegram
+* обучение
+* сложные доменные сценарии
+
+Это самый чистый путь.
+
+

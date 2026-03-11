@@ -1,0 +1,18 @@
+# SkillKernel platform configuration v0.1
+
+# Routing thresholds
+# A skill score below this value is treated as "unknown"
+threshold_unknown: 0.2
+
+# If the gap between the top two skill scores is below this value,
+# the result is treated as "ambiguous"
+threshold_ambiguous_gap: 0.15
+
+# How long (in seconds) a pending plan remains valid before expiring
+confirmation_ttl_seconds: 300
+
+# Directory for daily JSONL event logs
+log_dir: memory/event_log
+
+# Path to the JSON file storing pending (unconfirmed) plans
+pending_store_path: memory/runtime/pending_plans.json
