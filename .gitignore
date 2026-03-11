@@ -1,8 +1,8 @@
-.venv/
 __pycache__/
 *.pyc
 *.pyo
 .pytest_cache/
+.venv/
 
 memory/event_log/*
 !memory/event_log/.gitkeep
