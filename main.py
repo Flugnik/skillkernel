@@ -56,6 +56,7 @@ from executors.file_executor import (
     execute_write_json,
     execute_ensure_json_file,
     execute_noop,
+    execute_write_xlsx_export,
 )
 
 # ---------------------------------------------------------------------------
@@ -97,6 +98,7 @@ def build_app() -> CLIAdapter:
     executor_registry.register("write_json", execute_write_json)
     executor_registry.register("ensure_json_file", execute_ensure_json_file)
     executor_registry.register("noop", execute_noop)
+    executor_registry.register("write_xlsx_export", execute_write_xlsx_export)
     logger.info("Registered executor types: %s", executor_registry.list_types())
 
     # 4. Core components

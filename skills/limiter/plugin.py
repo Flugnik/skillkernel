@@ -206,12 +206,14 @@ class LimiterSkill(BaseSkill):
         )
 
     def _handle_export(self, intent: ExportIntent) -> SkillResult:
+        event_id = intent.delivery_date.isoformat()  # stable id for export plans
+        action_plan = planner.build_export_plan(
+            event_id=event_id,
+            delivery_date=intent.delivery_date,
+        )
         return SkillResult(
-            status=SkillStatus.rejected,
-            clarification_message=(
-                f"[Limiter] Export для {intent.delivery_date.isoformat()} "
-                "не реализован в v1.0."
-            ),
+            status=SkillStatus.plan_ready,
+            plan=action_plan,
         )
 
     def _handle_create_order(

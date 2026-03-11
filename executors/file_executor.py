@@ -112,3 +112,49 @@ def execute_ensure_json_file(action: Action) -> None:
 def execute_noop(action: Action) -> None:
     """No-operation executor. Logs and returns immediately."""
     logger.debug("noop action executed (params=%s)", action.params)
+
+
+def execute_write_xlsx_export(action: Action) -> None:
+    """Build and write an xlsx export file for a given delivery date.
+
+    Expected params:
+        path (str):           Target file path.
+        delivery_date (str):  ISO-format date string (YYYY-MM-DD).
+
+    Domain reads (products, production day, orders) and xlsx generation
+    happen here at execution time so that Action.params stays JSON-serialisable
+    and model_dump(mode="json") on SkillResult never encounters raw bytes.
+    """
+    from datetime import date as _date
+    from skills.limiter import repository
+    from skills.limiter.exporter import build_export_bytes
+
+    params = action.params
+    raw_path = params.get("path")
+    delivery_date_str: str | None = params.get("delivery_date")
+
+    if not raw_path:
+        raise ValueError("write_xlsx_export action requires 'path' param.")
+    if not delivery_date_str:
+        raise ValueError("write_xlsx_export action requires 'delivery_date' param.")
+
+    delivery_date = _date.fromisoformat(delivery_date_str)
+
+    products = repository.load_products()
+    day = repository.load_production_day(delivery_date)
+    orders = repository.load_orders_by_date(delivery_date)
+
+    data_bytes = build_export_bytes(
+        delivery_date=delivery_date,
+        products=[p for p in products if p.active],
+        day=day,
+        orders=orders,
+    )
+
+    target = Path(raw_path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    with target.open("wb") as fh:
+        fh.write(data_bytes)
+
+    logger.info("write_xlsx_export → '%s' (%d bytes)", target, len(data_bytes))

@@ -45,6 +45,7 @@ class ActionType(str, Enum):
     write_json = "write_json"
     ensure_json_file = "ensure_json_file"
     noop = "noop"
+    write_xlsx_export = "write_xlsx_export"
 
 
 # ---------------------------------------------------------------------------

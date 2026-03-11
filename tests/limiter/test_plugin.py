@@ -269,12 +269,34 @@ class TestDaysLoadIntent:
 
 
 class TestExportIntent:
-    def test_export_returns_rejected(self, skill, domain_root):
+    def test_export_returns_plan_ready(self, skill, domain_root):
         ctx = _make_ctx("/export 2026-03-15")
         result = skill.handle(ctx)
 
-        assert result.status == SkillStatus.rejected
-        assert "не реализован" in result.clarification_message.lower() or "not implemented" in result.clarification_message.lower()
+        assert result.status == SkillStatus.plan_ready
+        assert result.plan is not None
+        assert result.plan.skill_name == "limiter"
+        assert len(result.plan.actions) == 1
+        assert result.plan.actions[0].action_type.value == "write_xlsx_export"
+        assert "2026-03-15" in result.plan.preview_text
+
+    def test_export_plan_is_json_serialisable(self, skill, domain_root):
+        """SkillResult.model_dump(mode='json') must not raise UnicodeDecodeError.
+
+        Previously, raw xlsx bytes were stored in Action.params['data_bytes'],
+        causing the dispatcher's event-logger call to crash.
+        """
+        ctx = _make_ctx("/export 2026-03-15")
+        result = skill.handle(ctx)
+
+        # This must not raise
+        dumped = result.model_dump(mode="json")
+
+        # Sanity: params contain only JSON-safe types (str, not bytes)
+        action_params = dumped["plan"]["actions"][0]["params"]
+        assert isinstance(action_params["path"], str)
+        assert isinstance(action_params["delivery_date"], str)
+        assert "data_bytes" not in action_params
 
 
 # ---------------------------------------------------------------------------
