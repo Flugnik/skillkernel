@@ -113,6 +113,15 @@ pip install pytest
 python main.py
 ```
 
+New runtime entrypoint:
+
+```bash
+python -m entrypoints.cli.main
+python -m entrypoints.cli.main "привет"
+```
+
+The CLI is a thin adapter: it builds `CoreEvent`, calls `runtime.handle()`, and prints the returned `CoreResult`.
+
 Set `SK_DEBUG=1` for verbose debug logging:
 
 ```bash
