@@ -5,6 +5,7 @@ from entrypoints.telegram.adapter import (
     response_to_send_message_payload,
     telegram_update_to_event,
 )
+from entrypoints.telegram.main import TelegramHTTPClient
 from runtime.contract import CoreResult
 
 
@@ -40,7 +41,23 @@ def test_core_result_to_telegram_response_marks_error():
 
     response = core_result_to_telegram_response(result)
 
-    assert response == "[error] bad request"
+    assert response == "[Ошибка] bad request"
+
+
+def test_core_result_to_telegram_response_marks_confirm():
+    result = CoreResult(type="confirm", content="approve plan", meta={})
+
+    response = core_result_to_telegram_response(result)
+
+    assert response == "[Подтверждение] approve plan"
+
+
+def test_core_result_to_telegram_response_marks_clarify():
+    result = CoreResult(type="clarify", content="need more detail", meta={})
+
+    response = core_result_to_telegram_response(result)
+
+    assert response == "[Уточнение] need more detail"
 
 
 def test_process_update_smoke():
@@ -49,6 +66,22 @@ def test_process_update_smoke():
     assert response.chat_id == 42
     assert response.text
     assert response.kind in {"message", "clarify", "confirm"}
+
+
+def test_process_update_handles_start_as_transport_command():
+    response = process_update(TelegramUpdate(text="/start", chat_id=42))
+
+    assert response.chat_id == 42
+    assert response.kind == "message"
+    assert "текстовые запросы" in response.text
+
+
+def test_process_update_handles_help_as_transport_command():
+    response = process_update(TelegramUpdate(text="/help", chat_id=42))
+
+    assert response.chat_id == 42
+    assert response.kind == "message"
+    assert "Примеры запросов" in response.text
 
 
 def test_response_to_send_message_payload_returns_text_only_payload():
@@ -65,4 +98,58 @@ def test_response_to_send_message_payload_skips_missing_chat():
     payload = response_to_send_message_payload(response)
 
     assert payload is None
+
+
+def test_telegram_http_client_uses_httpx_for_get_updates(monkeypatch):
+    calls = []
+
+    class DummyResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"ok": True, "result": [{"update_id": 1}, {"update_id": 2}]}
+
+    def fake_get(url, timeout):
+        calls.append(("get", url, timeout))
+        return DummyResponse()
+
+    monkeypatch.setattr("entrypoints.telegram.main.httpx.get", fake_get)
+
+    client = TelegramHTTPClient(token="token", api_base="https://example.invalid", timeout=12.5)
+
+    updates = client.get_updates(offset=41)
+
+    assert updates == [{"update_id": 1}, {"update_id": 2}]
+    assert calls == [("get", "https://example.invalid/bottoken/getUpdates?timeout=25&offset=41", 12.5)]
+
+
+def test_telegram_http_client_uses_httpx_for_send_message(monkeypatch):
+    calls = []
+
+    class DummyResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"ok": True}
+
+    def fake_post(url, json, timeout):
+        calls.append(("post", url, json, timeout))
+        return DummyResponse()
+
+    monkeypatch.setattr("entrypoints.telegram.main.httpx.post", fake_post)
+
+    client = TelegramHTTPClient(token="token", api_base="https://example.invalid", timeout=8.0)
+
+    client.send_message(chat_id=123, text="hello")
+
+    assert calls == [
+        (
+            "post",
+            "https://example.invalid/bottoken/sendMessage",
+            {"chat_id": 123, "text": "hello"},
+            8.0,
+        )
+    ]
 

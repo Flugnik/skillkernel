@@ -41,16 +41,57 @@ def telegram_update_to_event(update: TelegramUpdate) -> CoreEvent:
     )
 
 
+def _normalize_transport_command(text: str) -> str | None:
+    stripped = text.strip()
+    if not stripped.startswith("/"):
+        return None
+    command = stripped.split()[0].split("@", 1)[0]
+    if command == "/start":
+        return "start"
+    if command == "/help":
+        return "help"
+    return None
+
+
+def _transport_command_response(command: str) -> TelegramResponse:
+    if command == "start":
+        text = (
+            "Привет. Я принимаю текстовые запросы и передаю их в систему.\n"
+            "Просто отправьте сообщение с вашим запросом."
+        )
+    else:
+        text = (
+            "Примеры запросов:\n"
+            "- сколько осталось на складе?\n"
+            "- спланируй производство на завтра\n"
+            "- проверь лимит по продукту"
+        )
+    return TelegramResponse(chat_id=None, text=text, kind="message", meta={"source": "telegram", "transport_command": command})
+
+
 def core_result_to_telegram_response(result: CoreResult) -> str | dict[str, object]:
     """Convert runtime output into a Telegram-friendly response payload."""
 
     if result.type == "error":
-        return f"[error] {result.content}"
+        return f"[Ошибка] {result.content}"
+    if result.type == "confirm":
+        return f"[Подтверждение] {result.content}"
+    if result.type == "clarify":
+        return f"[Уточнение] {result.content}"
     return result.content
 
 
 def process_update(update: TelegramUpdate) -> TelegramResponse:
     """Handle a Telegram update via the shared runtime handler."""
+
+    command = _normalize_transport_command(update.text)
+    if command is not None:
+        return TelegramResponse(
+            chat_id=update.chat_id,
+            text=_transport_command_response(command).text,
+            kind="message",
+            meta={"source": "telegram", "transport_command": command},
+        )
 
     result = handle(telegram_update_to_event(update))
     payload = core_result_to_telegram_response(result)

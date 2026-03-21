@@ -138,6 +138,12 @@ $env:TELEGRAM_BOT_TOKEN="123456:ABCDEF"; python -m entrypoints.telegram.main
 
 The Telegram entrypoint uses long polling via `getUpdates`, supports text-only messages, routes each update through `runtime.handle()`, and replies with `sendMessage`.
 
+Operational notes:
+
+- logs startup, polling, incoming text messages, core result types, retries, and shutdown
+- transient network/API errors are retried with a small backoff
+- stop the process with `Ctrl+C`; shutdown is handled cleanly
+
 Set `SK_DEBUG=1` for verbose debug logging:
 
 ```bash

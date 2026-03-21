@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from dataclasses import dataclass
-from urllib import error, parse, request
+from urllib import parse
 from typing import Protocol
+
+import httpx
 
 from .adapter import (
     TelegramResponse,
@@ -28,27 +31,27 @@ class TelegramBotClient(Protocol):
 
 @dataclass
 class TelegramHTTPClient:
-    """Tiny Telegram Bot API client using urllib."""
+    """Tiny Telegram Bot API client using httpx."""
 
     token: str
     api_base: str = "https://api.telegram.org"
     timeout: float = 30.0
 
     def _open_json(self, url: str, payload: dict[str, object] | None = None) -> dict[str, object]:
-        data = None
-        headers = {"Content-Type": "application/json"}
-        if payload is not None:
-            data = json.dumps(payload).encode("utf-8")
-        req = request.Request(url, data=data, headers=headers, method="POST" if data is not None else "GET")
         try:
-            with request.urlopen(req, timeout=self.timeout) as response:
-                raw = response.read().decode("utf-8")
-        except error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"Telegram API error {exc.code}: {detail}") from exc
-        except error.URLError as exc:
-            raise RuntimeError(f"Telegram network error: {exc.reason}") from exc
-        parsed = json.loads(raw)
+            if payload is None:
+                response = httpx.get(url, timeout=self.timeout)
+            else:
+                response = httpx.post(url, json=payload, timeout=self.timeout)
+            response.raise_for_status()
+        except httpx.TimeoutException as exc:
+            raise RuntimeError(f"Telegram network error: {exc}") from exc
+        except httpx.HTTPStatusError as exc:
+            detail = exc.response.text
+            raise RuntimeError(f"Telegram API error {exc.response.status_code}: {detail}") from exc
+        except httpx.RequestError as exc:
+            raise RuntimeError(f"Telegram network error: {exc}") from exc
+        parsed = response.json()
         if not isinstance(parsed, dict):
             raise RuntimeError("Telegram API returned a non-object response")
         return parsed
@@ -66,6 +69,18 @@ class TelegramHTTPClient:
         response = self._open_json(f"{self.api_base}/bot{self.token}/sendMessage", payload)
         if response.get("ok") is not True:
             raise RuntimeError(f"Telegram sendMessage failed: {response}")
+
+
+def _log(message: str) -> None:
+    print(f"[telegram] {message}", flush=True)
+
+
+def _is_retryable_error(exc: Exception) -> bool:
+    return isinstance(exc, (RuntimeError, TimeoutError))
+
+
+def _backoff_seconds(attempt: int) -> float:
+    return min(5.0, 0.5 * (2 ** max(0, attempt - 1)))
 
 
 def _load_token() -> str:
@@ -96,8 +111,24 @@ def run_polling(client: TelegramBotClient) -> None:
     """Run a thin polling loop over Telegram updates."""
 
     offset = 0
+    retry_attempt = 0
+    _log("starting bot")
+    _log("starting polling")
     while True:
-        updates = client.get_updates(offset)
+        try:
+            updates = client.get_updates(offset)
+            retry_attempt = 0
+        except KeyboardInterrupt:
+            _log("shutdown requested")
+            return
+        except Exception as exc:  # pragma: no cover - defensive transport guard
+            if not _is_retryable_error(exc):
+                raise
+            retry_attempt += 1
+            delay = _backoff_seconds(retry_attempt)
+            _log(f"polling error: {exc}; retrying in {delay:.1f}s")
+            time.sleep(delay)
+            continue
         for update in updates:
             update_id = update.get("update_id")
             if isinstance(update_id, int):
@@ -105,18 +136,36 @@ def run_polling(client: TelegramBotClient) -> None:
             telegram_update = _extract_text_message(update)
             if telegram_update is None:
                 continue
+            _log(f"incoming text message chat_id={telegram_update.chat_id}")
             response: TelegramResponse = process_update(telegram_update)
+            _log(f"core result type={response.kind}")
             payload = response_to_send_message_payload(response)
             if payload is not None:
-                client.send_message(payload["chat_id"], payload["text"])
+                try:
+                    client.send_message(payload["chat_id"], payload["text"])
+                except KeyboardInterrupt:
+                    _log("shutdown requested")
+                    return
+                except Exception as exc:  # pragma: no cover - defensive transport guard
+                    if not _is_retryable_error(exc):
+                        raise
+                    retry_attempt += 1
+                    delay = _backoff_seconds(retry_attempt)
+                    _log(f"send error: {exc}; retrying in {delay:.1f}s")
+                    time.sleep(delay)
+                    continue
 
 
 def main() -> int:
     """Start the Telegram polling bot."""
 
     token = _load_token()
+    _log("booting Telegram bot")
     client = TelegramHTTPClient(token=token)
-    run_polling(client)
+    try:
+        run_polling(client)
+    except KeyboardInterrupt:
+        _log("shutdown requested")
     return 0
 
 
