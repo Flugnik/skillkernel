@@ -63,6 +63,15 @@ class IncomingEvent(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class ConfirmationRequest(BaseModel):
+    """Pending confirmation context attached to a follow-up user reply."""
+
+    plan_id: str
+    plan_event_id: str
+    skill_name: str
+    confirmation_type: str = "plan"
+
+
 # ---------------------------------------------------------------------------
 # Routing
 # ---------------------------------------------------------------------------

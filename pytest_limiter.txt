@@ -1,0 +1,19 @@
+.................................................F....................   [100%]
+================================== FAILURES ===================================
+_____________ TestMixedSkuAndAlias.test_short_salo_alias_resolves _____________
+
+self = <tests.limiter.test_parser.TestMixedSkuAndAlias object at 0x0000017AC2B787D0>
+alias_index = {'брынза': 'brynza_300', 'брынзы': 'brynza_300', 'йогурт классический': 'drink_yogurt_classic_0_5', 'йогурт клубничный': 'drink_yogurt_strawberry_0_5', ...}
+
+    def test_short_salo_alias_resolves(self, alias_index):
+        """Short alias must resolve the real salo SKU in user text."""
+        items, no_qty = _extract_items_by_alias("Сало 1", alias_index)
+        assert not no_qty
+>       assert len(items) == 1
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+tests\limiter\test_parser.py:419: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/limiter/test_parser.py::TestMixedSkuAndAlias::test_short_salo_alias_resolves
+1 failed, 69 passed in 0.36s

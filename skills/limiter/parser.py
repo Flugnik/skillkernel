@@ -1,4 +1,4 @@
-"""
+﻿"""
 Limiter rule-based parser v1.1.
 
 Recognises four intent types from plain text:
@@ -408,10 +408,40 @@ def _extract_items(
 
 
 def _extract_client_name(text: str) -> Optional[str]:
-    """Very simple heuristic: capitalised Russian word after date removal."""
-    m = re.search(r"\b([А-ЯЁ][а-яё]{2,})\b", text)
-    if m:
-        return m.group(1)
+    """Extract a likely Russian client name from the first meaningful lines.
+
+    Strategy:
+    1. Check the first two non-empty lines.
+    2. Prefer a full two-word capitalized name at the start of a line.
+    3. Ignore leading imperative/order words like "Прими", "Добавь".
+    4. Stop at punctuation or product list that follows the name.
+    """
+    if not text.strip():
+        return None
+
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    candidate_lines = lines[:2]
+
+    skip_words = {
+        "Прими", "Принять", "Добавь", "Добавить", "Заказ", "Заказа",
+    }
+
+    for line in candidate_lines:
+        line = re.sub(r"^[^А-ЯЁ]+", "", line)
+
+        # Full name at line start: "Елена Илизарова"
+        m = re.match(r"^([А-ЯЁ][а-яё]{2,})\s+([А-ЯЁ][а-яё]{2,})\b", line)
+        if m:
+            first, last = m.group(1), m.group(2)
+            if first not in skip_words:
+                return f"{first} {last}"
+
+        # Fallback: collect capitalized words, but ignore leading command word
+        words = re.findall(r"\b[А-ЯЁ][а-яё]{2,}\b", line)
+        words = [w for w in words if w not in skip_words]
+        if len(words) >= 2:
+            return f"{words[0]} {words[1]}"
+
     return None
 
 

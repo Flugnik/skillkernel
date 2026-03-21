@@ -101,6 +101,19 @@ class ConfirmManager:
         """Return all pending plan IDs (including potentially expired ones)."""
         return list(self._load().keys())
 
+    def find_latest_plan(self, *, skill_name: str | None = None) -> ActionPlan:
+        """Return the most recently created pending plan, optionally filtered by skill."""
+        store = self._load()
+        plans = [ActionPlan.model_validate(raw) for raw in store.values()]
+        if skill_name is not None:
+            plans = [plan for plan in plans if plan.skill_name == skill_name]
+        if not plans:
+            raise PlanNotFoundError(skill_name or "pending")
+        plans.sort(key=lambda plan: plan.created_at)
+        latest = plans[-1]
+        self._assert_not_expired(latest)
+        return latest
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------

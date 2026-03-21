@@ -84,6 +84,60 @@ def test_process_update_handles_help_as_transport_command():
     assert "Примеры запросов" in response.text
 
 
+def test_telegram_confirm_yes_executes_pending_limiter_plan(tmp_path, monkeypatch):
+    pending_path = tmp_path / "pending_plans.json"
+    log_dir = tmp_path / "logs"
+    monkeypatch.setenv("SKILLKERNEL_CONFIG", "")
+    monkeypatch.setattr("core.config.load_config", lambda: __import__("core.config", fromlist=["PlatformConfig"]).PlatformConfig(pending_store_path=str(pending_path), log_dir=str(log_dir)))
+
+    from runtime import handler as runtime_handler
+    from core.confirm_manager import ConfirmManager
+    from core.models import Action, ActionPlan, ActionType
+
+    runtime_handler._DISPATCHER._confirm_manager = ConfirmManager(store_path=str(pending_path))
+    plan = ActionPlan(
+        skill_name="limiter",
+        event_id="evt-1",
+        actions=[Action(action_type=ActionType.noop, params={})],
+        preview_text="preview",
+        requires_confirmation=True,
+    )
+    runtime_handler._DISPATCHER._confirm_manager.store_plan(plan)
+
+    response = process_update(TelegramUpdate(text="да", chat_id=42))
+
+    assert response.kind == "message"
+    assert response.chat_id == 42
+    assert "Plan confirmed and executed." in response.text or "Executed" in response.text
+
+
+def test_telegram_confirm_no_rejects_pending_limiter_plan(tmp_path, monkeypatch):
+    pending_path = tmp_path / "pending_plans.json"
+    log_dir = tmp_path / "logs"
+    monkeypatch.setenv("SKILLKERNEL_CONFIG", "")
+    monkeypatch.setattr("core.config.load_config", lambda: __import__("core.config", fromlist=["PlatformConfig"]).PlatformConfig(pending_store_path=str(pending_path), log_dir=str(log_dir)))
+
+    from runtime import handler as runtime_handler
+    from core.confirm_manager import ConfirmManager
+    from core.models import Action, ActionPlan, ActionType
+
+    runtime_handler._DISPATCHER._confirm_manager = ConfirmManager(store_path=str(pending_path))
+    plan = ActionPlan(
+        skill_name="limiter",
+        event_id="evt-2",
+        actions=[Action(action_type=ActionType.noop, params={})],
+        preview_text="preview",
+        requires_confirmation=True,
+    )
+    runtime_handler._DISPATCHER._confirm_manager.store_plan(plan)
+
+    response = process_update(TelegramUpdate(text="отмена", chat_id=42))
+
+    assert response.kind == "message"
+    assert response.chat_id == 42
+    assert "rejected" in response.text.lower() or "отмен" in response.text.lower()
+
+
 def test_response_to_send_message_payload_returns_text_only_payload():
     response = process_update(TelegramUpdate(text="привет", chat_id=42))
 

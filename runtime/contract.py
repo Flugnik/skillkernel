@@ -14,6 +14,15 @@ class CoreEvent(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
+class ConfirmationRequest(BaseModel):
+    """Active confirmation context for a follow-up reply."""
+
+    plan_id: str
+    plan_event_id: str
+    skill_name: str
+    source: str = "telegram"
+
+
 class CoreResult(BaseModel):
     """Normalized runtime output returned to adapters."""
 

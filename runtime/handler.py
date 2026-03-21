@@ -23,6 +23,23 @@ from skills.limiter.plugin import LimiterSkill
 from .contract import CoreEvent, CoreResult
 
 
+_CONFIRM_TEXTS = {
+    "да",
+    "подтверждаю",
+    "yes",
+    "confirm",
+    "ok",
+    "ага",
+}
+
+_REJECT_TEXTS = {
+    "нет",
+    "отмена",
+    "cancel",
+    "reject",
+}
+
+
 def _build_dispatcher() -> Dispatcher:
     config = load_config()
 
@@ -56,8 +73,31 @@ def _build_dispatcher() -> Dispatcher:
 _DISPATCHER = _build_dispatcher()
 
 
+def _telegram_confirmation_text(text: str) -> str | None:
+    normalized = text.strip().lower()
+    if normalized in _CONFIRM_TEXTS:
+        return "confirm"
+    if normalized in _REJECT_TEXTS:
+        return "reject"
+    return None
+
+
 def handle(event: CoreEvent) -> CoreResult:
     """Handle a normalized event and return a normalized runtime result."""
+
+    if event.meta.get("source") == "telegram":
+        confirmation_action = _telegram_confirmation_text(event.text)
+        if confirmation_action is not None:
+            try:
+                plan = _DISPATCHER._confirm_manager.find_latest_plan(skill_name="limiter")
+            except Exception:
+                pass
+            else:
+                if confirmation_action == "confirm":
+                    outcome = _DISPATCHER.confirm_plan(plan.plan_id)
+                    return CoreResult(type="message", content=outcome.message, meta={"plan_id": plan.plan_id})
+                outcome_message = _DISPATCHER.reject_plan(plan.plan_id)
+                return CoreResult(type="message", content=outcome_message, meta={"plan_id": plan.plan_id})
 
     outcome = _DISPATCHER.dispatch(
         __import__("core.models", fromlist=["IncomingEvent"]).IncomingEvent(

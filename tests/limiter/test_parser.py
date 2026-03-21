@@ -311,6 +311,12 @@ class TestCreateOrderAliasMode:
         assert skus.get("tvorog_0_5") == 2
         assert skus.get("drink_yogurt_strawberry_0_5") == 2
 
+    def test_client_name_two_words_preserved(self, alias_index):
+        text = "Прими заказ на 2 апреля\nЕлена Илизарова. Творог 4, Масло 2, Тушенка 1"
+        intent = parse(text, alias_index=alias_index)
+        assert isinstance(intent, CreateOrderIntent)
+        assert getattr(intent.draft, "client_name", None) == "Елена Илизарова"
+
 
 # ---------------------------------------------------------------------------
 # Test 4 (spec): "если будет масло" — no qty → no order item
@@ -406,12 +412,32 @@ class TestMixedSkuAndAlias:
         assert skus.get("brynza_300") == 2
         assert skus.get("milk_1_5") == 3
 
+    def test_short_salo_alias_resolves(self, alias_index):
+        """Short alias must resolve the real salo SKU in user text."""
+        items, no_qty = _extract_items_by_alias("Сало 1", alias_index)
+        assert not no_qty
+        assert len(items) == 1
+        assert items[0].sku == "salo_spread_200"
+        assert items[0].requested_qty == 1
+
     def test_pure_sku_still_works_with_alias_index(self, alias_index):
         """Pure SKU input must still work even when alias_index is provided."""
         intent = parse("2026-03-26 milk_1_5 5", alias_index=alias_index)
         assert isinstance(intent, CreateOrderIntent)
         assert intent.draft.items[0].sku == "milk_1_5"
         assert intent.draft.items[0].requested_qty == 5
+
+    def test_client_name_ignores_leading_imperative_verb(self, alias_index):
+        intent = parse(
+            "Прими заказ на 2 апреля\nЕлена Илизарова. Творог 4, Масло 2, Тушенка 1",
+            alias_index=alias_index,
+        )
+        assert isinstance(intent, CreateOrderIntent)
+        assert intent.draft.client_name == "Елена Илизарова"
+        assert intent.draft.delivery_date == date(2026, 4, 2)
+        skus = {i.sku: i.requested_qty for i in intent.draft.items}
+        assert skus.get("tvorog_0_5") == 4
+        assert skus.get("butter_200") == 2
 
 
 # ---------------------------------------------------------------------------
