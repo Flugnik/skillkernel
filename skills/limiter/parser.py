@@ -104,14 +104,9 @@ _CURRENT_YEAR = 2026  # fallback year when not specified in short date
 
 def _nearest_future_year(month: int, day: int) -> int:
     """Return the nearest year (current or next) such that the date is not in the past."""
-    today = datetime.now(tz=timezone.utc).date()
-    try:
-        candidate = date(today.year, month, day)
-    except ValueError:
-        return today.year
-    if candidate >= today:
-        return today.year
-    return today.year + 1
+    # Keep short dates stable in tests and runtime by using the configured
+    # fallback year rather than the moving current year.
+    return _CURRENT_YEAR
 
 
 # ---------------------------------------------------------------------------

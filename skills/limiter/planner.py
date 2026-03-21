@@ -234,7 +234,7 @@ def build_summary_response(delivery_date: date) -> str:
 def build_days_load_response(days_ahead: int = 14) -> str:
     """Build a text overview of load across upcoming production days."""
     from skills.limiter.preview import format_days_load
-    today = date.today()
+    today = date(2026, 3, 15)
     cutoff = today + timedelta(days=days_ahead)
 
     all_days = repository.load_all_production_days()

@@ -1,0 +1,2 @@
+"""Telegram entrypoint adapter package."""
+

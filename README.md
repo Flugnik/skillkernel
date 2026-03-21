@@ -122,6 +122,22 @@ python -m entrypoints.cli.main "привет"
 
 The CLI is a thin adapter: it builds `CoreEvent`, calls `runtime.handle()`, and prints the returned `CoreResult`.
 
+### Telegram polling entrypoint
+
+Run the Telegram transport with a real bot token:
+
+```bash
+set TELEGRAM_BOT_TOKEN=123456:ABCDEF && python -m entrypoints.telegram.main
+```
+
+On PowerShell:
+
+```powershell
+$env:TELEGRAM_BOT_TOKEN="123456:ABCDEF"; python -m entrypoints.telegram.main
+```
+
+The Telegram entrypoint uses long polling via `getUpdates`, supports text-only messages, routes each update through `runtime.handle()`, and replies with `sendMessage`.
+
 Set `SK_DEBUG=1` for verbose debug logging:
 
 ```bash

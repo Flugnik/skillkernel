@@ -239,5 +239,5 @@ def format_days_load(
 
     return (
         f"  {day.delivery_date.isoformat()}  [{bar}] {pct:5.1f}%"
-        f"  (резерв {total_reserved} / лимит {total_limit})"
+        f"  (reserve {total_reserved} / limit {total_limit})"
     )
