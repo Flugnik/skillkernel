@@ -112,27 +112,41 @@ def test_summary_sheet_values():
 
     # Header row
     assert ws.cell(1, 1).value == "Товар"
-    assert ws.cell(1, 2).value == "Лимит"
-    assert ws.cell(1, 3).value == "Забронировано"
-    assert ws.cell(1, 4).value == "Свободно"
+    assert ws.cell(1, 2).value == "Цена"
+    assert ws.cell(1, 3).value == "Лимит"
+    assert ws.cell(1, 4).value == "Бронь"
+    assert ws.cell(1, 5).value == "Свободно"
+    assert ws.cell(1, 6).value == "Сумма"
 
-    # milk_1_5 row (row 2): limit=100, reserved=50, free=50
+    # milk_1_5 row (row 2): price=65, limit=100, reserved=50, free=50, sum=3250
     assert ws.cell(2, 1).value == "Молоко 1.5%"
-    assert ws.cell(2, 2).value == 100
-    assert ws.cell(2, 3).value == 50
+    assert ws.cell(2, 2).value == 65.0
+    assert ws.cell(2, 3).value == 100
     assert ws.cell(2, 4).value == 50
+    assert ws.cell(2, 5).value == 50
+    assert ws.cell(2, 6).value == 3250.0
 
-    # kefir_1 row (row 3): limit=60, reserved=10, free=50
+    # kefir_1 row (row 3): price=70, limit=60, reserved=10, free=50, sum=700
     assert ws.cell(3, 1).value == "Кефир 1%"
-    assert ws.cell(3, 2).value == 60
-    assert ws.cell(3, 3).value == 10
-    assert ws.cell(3, 4).value == 50
+    assert ws.cell(3, 2).value == 70.0
+    assert ws.cell(3, 3).value == 60
+    assert ws.cell(3, 4).value == 10
+    assert ws.cell(3, 5).value == 50
+    assert ws.cell(3, 6).value == 700.0
 
-    # butter_72 row (row 4): limit=20, reserved=0, free=20
+    # butter_72 row (row 4): price=350, limit=20, reserved=0, free=20, sum=0
     assert ws.cell(4, 1).value == "Масло 72.5%"
-    assert ws.cell(4, 2).value == 20
-    assert ws.cell(4, 3).value == 0
-    assert ws.cell(4, 4).value == 20
+    assert ws.cell(4, 2).value == 350.0
+    assert ws.cell(4, 3).value == 20
+    assert ws.cell(4, 4).value == 0
+    assert ws.cell(4, 5).value == 20
+    assert ws.cell(4, 6).value == 0.0
+
+    # Totals
+    assert ws.cell(5, 1).value == "Итого по броне"
+    assert ws.cell(5, 6).value == 3950.0
+    assert ws.cell(6, 1).value == "Потенциал при полном лимите"
+    assert ws.cell(6, 6).value == 17700.0
 
 
 # ---------------------------------------------------------------------------
@@ -208,7 +222,7 @@ def test_cancelled_and_draft_excluded():
 
     # Сводка: only Иван's 10 should be reserved
     ws_sum = wb["Сводка"]
-    assert ws_sum.cell(2, 3).value == 10  # milk reserved = 10
+    assert ws_sum.cell(2, 4).value == 10  # milk reserved = 10
 
     # По клиентам: only 1 data row
     ws_cli = wb["По клиентам"]

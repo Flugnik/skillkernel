@@ -28,6 +28,14 @@ class TelegramResponse:
     meta: dict[str, object]
 
 
+@dataclass(frozen=True)
+class TelegramBotCommand:
+    """Telegram bot command definition for menu registration."""
+
+    command: str
+    description: str
+
+
 def telegram_update_to_event(update: TelegramUpdate) -> CoreEvent:
     """Convert a Telegram update into the runtime input contract."""
 
@@ -53,6 +61,17 @@ def _normalize_transport_command(text: str) -> str | None:
     return None
 
 
+def telegram_bot_commands() -> list[TelegramBotCommand]:
+    """Return the bot menu commands registered in Telegram."""
+
+    return [
+        TelegramBotCommand(command="start", description="Старт"),
+        TelegramBotCommand(command="help", description="Помощь"),
+        TelegramBotCommand(command="summary", description="Limiter: сводная по дате"),
+        TelegramBotCommand(command="export", description="Limiter: Excel по дате"),
+    ]
+
+
 def _transport_command_response(command: str) -> TelegramResponse:
     if command == "start":
         text = (
@@ -62,6 +81,8 @@ def _transport_command_response(command: str) -> TelegramResponse:
     else:
         text = (
             "Примеры запросов:\n"
+            "- /summary 2026-04-02\n"
+            "- /export 2026-04-02\n"
             "- сколько осталось на складе?\n"
             "- спланируй производство на завтра\n"
             "- проверь лимит по продукту"

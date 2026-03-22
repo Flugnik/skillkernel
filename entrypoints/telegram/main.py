@@ -12,8 +12,10 @@ from typing import Protocol
 import httpx
 
 from .adapter import (
+    TelegramBotCommand,
     TelegramResponse,
     TelegramUpdate,
+    telegram_bot_commands,
     process_update,
     response_to_send_message_payload,
 )
@@ -26,6 +28,12 @@ class TelegramBotClient(Protocol):
         raise NotImplementedError
 
     def send_message(self, chat_id: int, text: str) -> None:
+        raise NotImplementedError
+
+    def set_my_commands(self, commands: list[TelegramBotCommand]) -> None:
+        raise NotImplementedError
+
+    def set_chat_menu_button(self) -> None:
         raise NotImplementedError
 
 
@@ -70,6 +78,18 @@ class TelegramHTTPClient:
         if response.get("ok") is not True:
             raise RuntimeError(f"Telegram sendMessage failed: {response}")
 
+    def set_my_commands(self, commands: list[TelegramBotCommand]) -> None:
+        payload = {"commands": [{"command": command.command, "description": command.description} for command in commands]}
+        response = self._open_json(f"{self.api_base}/bot{self.token}/setMyCommands", payload)
+        if response.get("ok") is not True:
+            raise RuntimeError(f"Telegram setMyCommands failed: {response}")
+
+    def set_chat_menu_button(self) -> None:
+        payload = {"menu_button": {"type": "commands"}}
+        response = self._open_json(f"{self.api_base}/bot{self.token}/setChatMenuButton", payload)
+        if response.get("ok") is not True:
+            raise RuntimeError(f"Telegram setChatMenuButton failed: {response}")
+
 
 def _log(message: str) -> None:
     print(f"[telegram] {message}", flush=True)
@@ -88,6 +108,11 @@ def _load_token() -> str:
     if not token:
         raise RuntimeError("TELEGRAM_BOT_TOKEN is required to start the Telegram bot")
     return token
+
+
+def _register_bot_menu(client: TelegramBotClient) -> None:
+    client.set_my_commands(telegram_bot_commands())
+    client.set_chat_menu_button()
 
 
 def _extract_text_message(update: dict[str, object]) -> TelegramUpdate | None:
@@ -163,6 +188,7 @@ def main() -> int:
     _log("booting Telegram bot")
     client = TelegramHTTPClient(token=token)
     try:
+        _register_bot_menu(client)
         run_polling(client)
     except KeyboardInterrupt:
         _log("shutdown requested")

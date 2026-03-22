@@ -1,1 +1,2 @@
+$env:TELEGRAM_BOT_TOKEN="8771411109:AAHbtV1S5Zle7zDlRifDPxhopSiG1K7QfA8"
 python -m entrypoints.telegram.main

@@ -317,6 +317,12 @@ class TestCreateOrderAliasMode:
         assert isinstance(intent, CreateOrderIntent)
         assert getattr(intent.draft, "client_name", None) == "Елена Илизарова"
 
+    def test_client_name_ignores_product_words(self, alias_index):
+        text = "Прими заказ на 2 апреля\nМасло Тушенка. Творог 4, Масло 2"
+        intent = parse(text, alias_index=alias_index)
+        assert isinstance(intent, CreateOrderIntent)
+        assert getattr(intent.draft, "client_name", None) == "Масло Тушенка"
+
 
 # ---------------------------------------------------------------------------
 # Test 4 (spec): "если будет масло" — no qty → no order item

@@ -3,6 +3,7 @@ from entrypoints.telegram.adapter import (
     core_result_to_telegram_response,
     process_update,
     response_to_send_message_payload,
+    telegram_bot_commands,
     telegram_update_to_event,
 )
 from entrypoints.telegram.main import TelegramHTTPClient
@@ -81,7 +82,19 @@ def test_process_update_handles_help_as_transport_command():
 
     assert response.chat_id == 42
     assert response.kind == "message"
-    assert "Примеры запросов" in response.text
+    assert "/summary 2026-04-02" in response.text
+    assert "/export 2026-04-02" in response.text
+
+
+def test_telegram_bot_commands_include_limiter_menu_items():
+    commands = telegram_bot_commands()
+
+    assert [(command.command, command.description) for command in commands] == [
+        ("start", "Старт"),
+        ("help", "Помощь"),
+        ("summary", "Limiter: сводная по дате"),
+        ("export", "Limiter: Excel по дате"),
+    ]
 
 
 def test_telegram_confirm_yes_executes_pending_limiter_plan(tmp_path, monkeypatch):
@@ -136,6 +149,24 @@ def test_telegram_confirm_no_rejects_pending_limiter_plan(tmp_path, monkeypatch)
     assert response.kind == "message"
     assert response.chat_id == 42
     assert "rejected" in response.text.lower() or "отмен" in response.text.lower()
+
+
+def test_telegram_confirm_yes_without_pending_plan_returns_clear_message(tmp_path, monkeypatch):
+    pending_path = tmp_path / "pending_plans.json"
+    log_dir = tmp_path / "logs"
+    monkeypatch.setenv("SKILLKERNEL_CONFIG", "")
+    monkeypatch.setattr("core.config.load_config", lambda: __import__("core.config", fromlist=["PlatformConfig"]).PlatformConfig(pending_store_path=str(pending_path), log_dir=str(log_dir)))
+
+    from runtime import handler as runtime_handler
+    from core.confirm_manager import ConfirmManager
+
+    runtime_handler._DISPATCHER._confirm_manager = ConfirmManager(store_path=str(pending_path))
+
+    response = process_update(TelegramUpdate(text="да", chat_id=42))
+
+    assert response.kind == "message"
+    assert response.chat_id == 42
+    assert "нет активного заказа" in response.text.lower()
 
 
 def test_response_to_send_message_payload_returns_text_only_payload():

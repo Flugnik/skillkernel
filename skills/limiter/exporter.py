@@ -2,7 +2,7 @@
 Limiter exporter — builds xlsx files for a given delivery date.
 
 Two sheets:
-  - Сводка:      Товар | Лимит | Забронировано | Свободно
+  - Сводка:      Товар | Цена | Лимит | Бронь | Свободно | Сумма
   - По клиентам: ФИО | <product columns in products.json order> | Примечание
 
 Only orders with status Confirmed or Written are included.
@@ -86,7 +86,7 @@ def _build_summary_sheet(
     ws = wb.create_sheet("Сводка")
 
     # Header row
-    headers = ["Товар", "Лимит", "Забронировано", "Свободно"]
+    headers = ["Товар", "Цена", "Лимит", "Бронь", "Свободно", "Сумма"]
     for col, h in enumerate(headers, start=1):
         cell = ws.cell(row=1, column=col, value=h)
         cell.font = Font(bold=True)
@@ -103,15 +103,32 @@ def _build_summary_sheet(
         for item in order.items:
             reserved_by_sku[item.sku] = reserved_by_sku.get(item.sku, 0) + item.accepted_qty
 
+    total_reserved_sum = 0.0
+    total_potential_sum = 0.0
+
     # Data rows — in products.json order
     for row_idx, product in enumerate(products, start=2):
         limit = limit_by_sku.get(product.sku, 0)
         reserved = reserved_by_sku.get(product.sku, 0)
         free = limit - reserved
+        reserved_sum = product.price * reserved
+        potential_sum = product.price * limit
+        total_reserved_sum += reserved_sum
+        total_potential_sum += potential_sum
         ws.cell(row=row_idx, column=1, value=product.title)
-        ws.cell(row=row_idx, column=2, value=limit)
-        ws.cell(row=row_idx, column=3, value=reserved)
-        ws.cell(row=row_idx, column=4, value=free)
+        ws.cell(row=row_idx, column=2, value=product.price)
+        ws.cell(row=row_idx, column=3, value=limit)
+        ws.cell(row=row_idx, column=4, value=reserved)
+        ws.cell(row=row_idx, column=5, value=free)
+        ws.cell(row=row_idx, column=6, value=reserved_sum)
+
+    total_row_idx = len(products) + 2
+    ws.cell(row=total_row_idx, column=1, value="Итого по броне")
+    ws.cell(row=total_row_idx, column=6, value=total_reserved_sum)
+
+    potential_row_idx = total_row_idx + 1
+    ws.cell(row=potential_row_idx, column=1, value="Потенциал при полном лимите")
+    ws.cell(row=potential_row_idx, column=6, value=total_potential_sum)
 
 
 def _build_clients_sheet(

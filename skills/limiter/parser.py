@@ -502,7 +502,7 @@ def parse(
     if not items:
         return None  # date found but no items with qty → not an order
 
-    client_name = _extract_client_name(stripped)
+    client_name = _extract_client_name(text_no_date)
 
     draft = OrderDraft(
         delivery_date=delivery_date,

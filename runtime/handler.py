@@ -9,6 +9,7 @@ from core.event_log import EventLogger
 from core.executor import ActionExecutor
 from core.registry import SkillRegistry
 from core.router import SkillRouter
+from core.exceptions import PlanExpiredError, PlanNotFoundError
 from executors.file_executor import (
     execute_ensure_json_file,
     execute_noop,
@@ -82,6 +83,13 @@ def _telegram_confirmation_text(text: str) -> str | None:
     return None
 
 
+def _no_active_confirmation_result() -> CoreResult:
+    return CoreResult(
+        type="message",
+        content="Нет активного заказа для подтверждения.",
+    )
+
+
 def handle(event: CoreEvent) -> CoreResult:
     """Handle a normalized event and return a normalized runtime result."""
 
@@ -90,8 +98,8 @@ def handle(event: CoreEvent) -> CoreResult:
         if confirmation_action is not None:
             try:
                 plan = _DISPATCHER._confirm_manager.find_latest_plan(skill_name="limiter")
-            except Exception:
-                pass
+            except (PlanNotFoundError, PlanExpiredError):
+                return _no_active_confirmation_result()
             else:
                 if confirmation_action == "confirm":
                     outcome = _DISPATCHER.confirm_plan(plan.plan_id)
